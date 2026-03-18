@@ -1,0 +1,171 @@
+// ============================================================
+// ENTREGABLE 6 – DIAGRAMA ERD DATA WAREHOUSE ASISYA
+// Fase 2 – Diseño del Data Warehouse
+//
+// 
+// ============================================================
+
+// ─── TABLA DE HECHOS ────────────────────────────────────────
+Table dwh.fact_ventas {
+  venta_key       bigint      [pk, increment, note: 'Surrogate key']
+  id_venta        integer     [not null, unique, note: 'Natural key – garantiza idempotencia']
+  fecha_key       integer     [not null, ref: > dwh.dim_fecha.fecha_key]
+  cliente_key     integer     [not null, ref: > dwh.dim_cliente.cliente_key]
+  producto_key    integer     [not null, ref: > dwh.dim_producto.producto_key]
+  vendedor_key    integer     [not null, ref: > dwh.dim_vendedor.vendedor_key]
+  canal_key       integer     [not null, ref: > dwh.dim_canal.canal_key]
+  ciudad_key      integer     [not null, ref: > dwh.dim_ciudad.ciudad_key]
+  cantidad        integer     [not null, note: '>0']
+  precio_unitario decimal     [not null, note: '>0']
+  monto_total     decimal     [not null, note: 'cantidad * precio_unitario']
+  descuento       decimal     [default: 0]
+  impuestos       decimal     [default: 0]
+  monto_neto      decimal     [note: 'GENERATED: monto_total - descuento + impuestos']
+  fecha_venta     date        [not null, note: 'Desnormalizado para queries rápidos']
+  fecha_carga     timestamp   [default: 'now()']
+  id_batch        varchar(100)[not null]
+}
+
+// ─── DIMENSIÓN FECHA ─────────────────────────────────────────
+Table dwh.dim_fecha {
+  fecha_key         integer     [pk, note: 'Formato YYYYMMDD']
+  fecha             date        [not null, unique]
+  anio              smallint    [not null]
+  mes               smallint    [not null, note: '1-12']
+  dia               smallint    [not null, note: '1-31']
+  nombre_mes        varchar(20) [not null]
+  trimestre         smallint    [not null, note: '1-4']
+  semana_anio       smallint    [not null]
+  dia_semana        smallint    [not null, note: '1=Lunes ISO']
+  nombre_dia_semana varchar(20) [not null]
+  es_fin_semana     boolean     [default: false]
+  es_festivo        boolean     [default: false]
+  nombre_festivo    varchar(100)[note: 'NULL si no es festivo']
+  fecha_creacion    timestamp
+}
+
+// ─── DIMENSIÓN CLIENTE (SCD Type 2) ──────────────────────────
+Table dwh.dim_cliente {
+  cliente_key          integer     [pk, increment, note: 'Surrogate key']
+  id_cliente           integer     [not null, note: 'Natural key del sistema fuente']
+  email_cliente        varchar(200)[note: 'Dato personal – tracked SCD2']
+  telefono_cliente     varchar(50) [note: 'Dato personal – tracked SCD2']
+  ciudad               varchar(100)[note: 'Tracked SCD2']
+  fecha_vigencia_desde date        [not null]
+  fecha_vigencia_hasta date        [note: 'NULL = registro vigente actualmente']
+  es_registro_actual   boolean     [default: true, note: 'TRUE solo en versión más reciente']
+  fecha_creacion       timestamp
+  fecha_actualizacion  timestamp
+}
+
+// ─── DIMENSIÓN PRODUCTO ───────────────────────────────────────
+Table dwh.dim_producto {
+  producto_key      integer      [pk, increment]
+  id_producto       integer      [not null, unique, note: 'Natural key']
+  nombre_producto   varchar(200) [not null]
+  categoria         varchar(100) [not null, note: 'Ej: Electrónica, Hogar, Ropa']
+  subcategoria      varchar(100) [note: 'Ej: Audio, Muebles, Calzado']
+  precio_referencia decimal      [note: 'Precio de lista – el real está en fact_ventas']
+  unidad_medida     varchar(50)  [default: 'Unidad']
+  activo            boolean      [default: true]
+  fecha_creacion    timestamp
+  fecha_actualizacion timestamp
+}
+
+// ─── DIMENSIÓN VENDEDOR ───────────────────────────────────────
+Table dwh.dim_vendedor {
+  vendedor_key      integer      [pk, increment]
+  nombre_vendedor   varchar(200) [not null, unique, note: 'Natural key']
+  ciudad_base       varchar(100)
+  region            varchar(100) [note: 'Usada para RLS en Power BI']
+  zona              varchar(100)
+  fecha_ingreso     date
+  estado            varchar(20)  [default: 'Activo', note: 'Activo/Inactivo/Vacaciones']
+  fecha_creacion    timestamp
+  fecha_actualizacion timestamp
+}
+
+// ─── DIMENSIÓN CANAL ──────────────────────────────────────────
+Table dwh.dim_canal {
+  canal_key     integer      [pk, increment]
+  nombre_canal  varchar(50)  [not null, unique, note: 'Online / Tienda / Marketplace']
+  tipo_canal    varchar(50)  [note: 'Digital / Físico']
+  descripcion   varchar(200)
+  comision_pct  decimal      [default: 0, note: '% comisión al vendedor']
+  fecha_creacion timestamp
+}
+
+// ─── DIMENSIÓN CIUDAD ─────────────────────────────────────────
+Table dwh.dim_ciudad {
+  ciudad_key    integer      [pk, increment]
+  nombre_ciudad varchar(100) [not null, unique]
+  departamento  varchar(100)
+  region        varchar(100) [note: 'Andina / Caribe / Pacífica']
+  poblacion     integer
+  latitud       decimal      [note: 'Para mapas en Power BI']
+  longitud      decimal      [note: 'Para mapas en Power BI']
+  fecha_creacion timestamp
+}
+
+// ─── STAGING (referencia) ─────────────────────────────────────
+Table staging.ventas_raw {
+  id_venta         varchar(50)
+  fecha            varchar(50)
+  id_cliente       varchar(50)
+  id_producto      varchar(50)
+  cantidad         varchar(50)
+  precio_unitario  varchar(50)
+  canal            varchar(100)
+  ciudad           varchar(100)
+  vendedor         varchar(200)
+  email_cliente    varchar(200)
+  telefono_cliente varchar(50)
+  fecha_carga      timestamp
+  archivo_origen   varchar(200)
+}
+
+Table staging.ventas_clean {
+  id_venta            integer
+  fecha               date
+  id_cliente          integer
+  id_producto         integer
+  cantidad            integer
+  precio_unitario     decimal
+  canal               varchar(50)
+  ciudad              varchar(100)
+  vendedor            varchar(200)
+  email_cliente       varchar(200)
+  telefono_cliente    varchar(50)
+  monto_total         decimal  [note: 'GENERATED']
+  fecha_procesamiento timestamp
+  id_batch            varchar(100)
+}
+
+// ─── CONTROL ──────────────────────────────────────────────────
+Table control.etl_execution_log {
+  log_id               integer    [pk, increment]
+  proceso              varchar(100)
+  fecha_inicio         timestamp
+  fecha_fin            timestamp
+  estado               varchar(20) [note: 'INICIADO/EXITOSO/FALLIDO/PARCIAL']
+  registros_procesados integer
+  registros_exitosos   integer
+  registros_fallidos   integer
+  mensaje_error        text
+  id_batch             varchar(100)
+  usuario              varchar(100)
+  servidor             varchar(100)
+}
+
+Table control.data_quality_log {
+  calidad_id          integer    [pk, increment]
+  tabla_origen        varchar(100)
+  regla_calidad       varchar(200)
+  fecha_validacion    timestamp
+  registros_evaluados integer
+  registros_validos   integer
+  registros_invalidos integer
+  porcentaje_calidad  decimal
+  detalles            text
+  id_batch            varchar(100)
+}

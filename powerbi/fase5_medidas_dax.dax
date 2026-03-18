@@ -1,0 +1,277 @@
+-- ============================================================
+-- MEDIDAS DAX – DASHBOARD VENTAS ASISYA
+-- Fase 5 – Dashboard Power BI
+-- ============================================================
+-- Instrucciones:
+--   1. Abrir Power BI Desktop
+--   2. En la vista de datos, crear una tabla vacía llamada
+--      "_Medidas" (convención para organizar medidas)
+--   3. Copiar cada medida con New Measure
+-- ============================================================
+
+
+-- ============================================================
+-- SECCIÓN 1: KPIs PRINCIPALES
+-- ============================================================
+
+-- Total de ventas (monto bruto)
+Ventas Totales =
+SUM(fact_ventas[monto_total])
+
+-- Número de transacciones
+Total Transacciones =
+COUNTROWS(fact_ventas)
+
+-- Ticket promedio por transacción
+Ticket Promedio =
+DIVIDE(
+    [Ventas Totales],
+    [Total Transacciones],
+    0
+)
+
+-- Total de unidades vendidas
+Total Unidades =
+SUM(fact_ventas[cantidad])
+
+-- Monto neto (descontando descuentos e incluyendo impuestos)
+Monto Neto Total =
+SUM(fact_ventas[monto_neto])
+
+-- Total de clientes únicos que compraron
+Clientes Únicos =
+DISTINCTCOUNT(fact_ventas[cliente_key])
+
+
+-- ============================================================
+-- SECCIÓN 2: COMPARATIVAS DE PERÍODO
+-- ============================================================
+
+-- Ventas del mes anterior (para comparativa MoM)
+Ventas Mes Anterior =
+CALCULATE(
+    [Ventas Totales],
+    DATEADD(dim_fecha[fecha], -1, MONTH)
+)
+
+-- Crecimiento mes sobre mes en valor absoluto
+Crecimiento MoM =
+[Ventas Totales] - [Ventas Mes Anterior]
+
+-- Crecimiento mes sobre mes en porcentaje
+Crecimiento MoM % =
+DIVIDE(
+    [Crecimiento MoM],
+    [Ventas Mes Anterior],
+    0
+)
+
+-- Ventas del año anterior (para comparativa YoY)
+Ventas Año Anterior =
+CALCULATE(
+    [Ventas Totales],
+    DATEADD(dim_fecha[fecha], -1, YEAR)
+)
+
+-- Crecimiento año sobre año en porcentaje
+Crecimiento YoY % =
+DIVIDE(
+    [Ventas Totales] - [Ventas Año Anterior],
+    [Ventas Año Anterior],
+    0
+)
+
+-- Ventas acumuladas en el año (YTD)
+Ventas YTD =
+TOTALYTD(
+    [Ventas Totales],
+    dim_fecha[fecha]
+)
+
+-- Ventas acumuladas año anterior (para comparar YTD)
+Ventas YTD Año Anterior =
+CALCULATE(
+    [Ventas YTD],
+    DATEADD(dim_fecha[fecha], -1, YEAR)
+)
+
+
+-- ============================================================
+-- SECCIÓN 3: PARTICIPACIÓN Y RANKINGS
+-- ============================================================
+
+-- Participación % de ventas sobre el total global
+-- (útil en gráficos de ciudad, canal, producto)
+Participación % =
+DIVIDE(
+    [Ventas Totales],
+    CALCULATE([Ventas Totales], ALL(fact_ventas)),
+    0
+)
+
+-- Participación % sobre el total filtrado visible
+-- (respeta los filtros del reporte)
+Participación % Filtrada =
+DIVIDE(
+    [Ventas Totales],
+    CALCULATE([Ventas Totales], ALLSELECTED(fact_ventas)),
+    0
+)
+
+-- Ranking de ciudades por ventas (para visualización de barras)
+Ranking Ciudad =
+RANKX(
+    ALL(dim_ciudad[nombre_ciudad]),
+    [Ventas Totales],
+    ,
+    DESC,
+    DENSE
+)
+
+-- Ranking de vendedores por ventas
+Ranking Vendedor =
+RANKX(
+    ALL(dim_vendedor[nombre_vendedor]),
+    [Ventas Totales],
+    ,
+    DESC,
+    DENSE
+)
+
+-- Ranking de productos por monto
+Ranking Producto Monto =
+RANKX(
+    ALL(dim_producto[nombre_producto]),
+    [Ventas Totales],
+    ,
+    DESC,
+    DENSE
+)
+
+-- Ranking de productos por unidades
+Ranking Producto Unidades =
+RANKX(
+    ALL(dim_producto[nombre_producto]),
+    [Total Unidades],
+    ,
+    DESC,
+    DENSE
+)
+
+
+-- ============================================================
+-- SECCIÓN 4: MEDIDAS PARA TARGETS Y SEMÁFOROS
+-- ============================================================
+
+-- Indicador de color según cumplimiento de meta
+-- (asume meta = promedio histórico * 1.05)
+Color KPI Ventas =
+VAR meta = CALCULATE([Ventas Totales], ALL(dim_fecha)) / 
+           CALCULATE(DISTINCTCOUNT(dim_fecha[mes_anio]), ALL(dim_fecha)) * 1.05
+VAR actual = [Ventas Totales]
+RETURN
+    SWITCH(
+        TRUE(),
+        actual >= meta,           "Verde",
+        actual >= meta * 0.90,    "Amarillo",
+        "Rojo"
+    )
+
+-- Variación formateada como texto para tarjetas KPI
+Variación MoM Texto =
+VAR pct = [Crecimiento MoM %]
+RETURN
+    IF(
+        ISBLANK(pct),
+        "Sin datos anteriores",
+        IF(pct >= 0,
+            "▲ " & FORMAT(pct, "0.0%"),
+            "▼ " & FORMAT(ABS(pct), "0.0%")
+        )
+    )
+
+
+-- ============================================================
+-- SECCIÓN 5: MEDIDAS PARA RLS
+-- ============================================================
+-- Estas medidas se usan junto con los roles RLS para
+-- mostrar información contextual en el dashboard
+
+-- Nombre del vendedor actual (para personalizar el título)
+Vendedor Actual =
+USERPRINCIPALNAME()
+
+-- Ventas del vendedor actualmente logueado
+-- (útil con rol Vendedor para auto-filtrado)
+Mis Ventas =
+CALCULATE(
+    [Ventas Totales],
+    FILTER(
+        dim_vendedor,
+        dim_vendedor[email_vendedor] = USERPRINCIPALNAME()
+    )
+)
+
+-- Mensaje de bienvenida personalizado
+Bienvenida =
+"Hola, " &
+CALCULATE(
+    FIRSTNONBLANK(dim_vendedor[nombre_vendedor], 1),
+    FILTER(dim_vendedor,
+           dim_vendedor[email_vendedor] = USERPRINCIPALNAME())
+)
+
+
+-- ============================================================
+-- SECCIÓN 6: MEDIDAS AUXILIARES PARA VISUALIZACIONES
+-- ============================================================
+
+-- Ventas por día (para gráficos de línea diario)
+Ventas Por Día =
+AVERAGEX(
+    VALUES(dim_fecha[fecha]),
+    [Ventas Totales]
+)
+
+-- Máximo de ventas en el período (para escala de gráficos)
+Max Ventas Período =
+MAXX(
+    VALUES(dim_fecha[anio_mes]),
+    [Ventas Totales]
+)
+
+-- Etiqueta para el eje X del gráfico mensual
+Etiqueta Mes =
+FORMAT(MIN(dim_fecha[fecha]), "MMM YYYY")
+
+-- Número de días con ventas en el período seleccionado
+Días Con Ventas =
+DISTINCTCOUNT(fact_ventas[fecha_venta])
+
+-- Promedio de ventas diarias
+Ventas Promedio Diario =
+DIVIDE([Ventas Totales], [Días Con Ventas], 0)
+
+
+-- ============================================================
+-- CONFIGURACIÓN DE RLS (DAX para roles)
+-- ============================================================
+-- Ir a: Modeling → Manage Roles → New Role
+-- Copiar el filtro DAX en la tabla correspondiente
+
+-- ROL: Vendedor
+-- Tabla: dim_vendedor
+-- Filtro DAX:
+[email_vendedor] = USERPRINCIPALNAME()
+
+-- ROL: Gerente Regional
+-- Tabla: dim_vendedor
+-- Filtro DAX:
+[region] = LOOKUPVALUE(
+    dim_vendedor[region],
+    dim_vendedor[email_vendedor],
+    USERPRINCIPALNAME()
+)
+
+-- ROL: Admin (sin restricciones)
+-- No requiere filtro DAX – ve todo
