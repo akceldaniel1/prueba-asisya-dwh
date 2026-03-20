@@ -118,21 +118,6 @@ FROM control.data_quality_log
 ORDER BY fecha_validacion DESC LIMIT 10;
 ```
 
----
-
-## Fases implementadas
-
-| Fase | Descripción | Peso | Estado |
-|---|---|---|---|
-| 1 | Gobernanza y Calidad de Datos | 15% | ✅ Completa |
-| 2 | Diseño del Data Warehouse | 15% | ✅ Completa |
-| 3 | Pipeline ETL con Airflow | 25% | ✅ Completa |
-| 4 | SQL Avanzado y Análisis | 15% | ✅ Completa |
-| 5 | Dashboard Power BI | 15% | ✅ Completa |
-| 6 | Seguridad y Compliance | 10% | ✅ Completa |
-| 7 | Arquitectura Escalable | 10% | ⏳ No incluida |
-
----
 
 ## Decisiones técnicas clave
 
