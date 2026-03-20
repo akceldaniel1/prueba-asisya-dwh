@@ -1,13 +1,4 @@
-# Prueba Técnica – Data Engineer ASISYA
-**Candidato:** [Tu nombre]  
-**Fecha de entrega:** Marzo 2026  
-**Stack:** PostgreSQL 15 · Apache Airflow 2.x · Python 3.9+ · Power BI · Docker
-
 ---
-
-## Resumen de la solución
-
-Solución completa de ingeniería de datos que cubre gobernanza de datos, diseño de Data Warehouse dimensional, pipeline ETL orquestado con Airflow, análisis SQL avanzado, dashboard ejecutivo en Power BI y controles de seguridad y compliance alineados con la Ley 1581 y GDPR.
 
 **Highlights:**
 - Pipeline ETL idempotente con 3 niveles de protección contra duplicados
@@ -154,8 +145,3 @@ ORDER BY fecha_validacion DESC LIMIT 10;
 
 ---
 
-## Contacto
-
-[Tu nombre]  
-[Tu email]  
-[Tu LinkedIn]
